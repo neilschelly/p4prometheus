@@ -462,6 +462,64 @@ monitor_checkpoint () {
     mv "$tmpfname" "$fname"
 }
 
+monitor_journals () {
+    # Metrics for monitoring journals with `p4 journal`
+
+    fname="$metrics_root/p4_journals${sdpinst_suffix}-${SERVER_ID}.prom"
+    tmpfname="$fname.$$"
+    two_weeks_ago=$((`date +%s` - 604800 - 604800)) # 604800 = 1w
+
+    rm -f "$tmpfname"
+    COUNT=0
+    OLDEST_JOURNAL=
+    LATEST_JOURNAL=
+    p4journals=`mktemp`
+    $p4 -F "%start% %end% %jsize% %jnum%" journals -F "type=journal start>$two_weeks_ago" >$p4journals
+    while read JOURNAL
+    do
+        COUNT=$(($COUNT + 1))
+        OLDEST_JOURNAL=$JOURNAL
+        if [ "$LATEST_JOURNAL" = "" ]
+        then
+            LATEST_JOURNAL=$JOURNAL
+        fi
+    done <$p4journals
+
+    echo "#HELP p4_journals_total Total number of journals in last 2 weeks" >> "$tmpfname"
+    echo "#TYPE p4_journals_total gauge" >> "$tmpfname"
+    echo "p4_journals_total{${serverid_label}${sdpinst_label}} $COUNT" >> "$tmpfname"
+
+    echo "#HELP p4_journals_oldest_ts Unix timestamp of oldest journal in last 2 weeks" >> "$tmpfname"
+    echo "#TYPE p4_journals_oldest_ts gauge" >> "$tmpfname"
+    OLDEST_TIMESTAMP=`echo $OLDEST_JOURNAL|cut -f2 -d' '`
+    echo "p4_journals_oldest_ts{${serverid_label}${sdpinst_label}} $OLDEST_TIMESTAMP" >> "$tmpfname"
+
+    echo "#HELP p4_journals_latest_ts Unix timestamp of newest journal" >> "$tmpfname"
+    echo "#TYPE p4_journals_latest_ts gauge" >> "$tmpfname"
+    LATEST_TIMESTAMP=`echo $LATEST_JOURNAL|cut -f2 -d' '`
+    echo "p4_journals_latest_ts{${serverid_label}${sdpinst_label}} $LATEST_TIMESTAMP" >> "$tmpfname"
+
+    echo "#HELP p4_journals_latest_elapsed Number of seconds to produce most recent journal" >> "$tmpfname"
+    echo "#TYPE p4_journals_latest_elapsed gauge" >> "$tmpfname"
+    LATEST_START=`echo $LATEST_JOURNAL|cut -f1 -d' '`
+    LATEST_ELAPSED=$(($LATEST_TIMESTAMP - $LATEST_START))
+    echo "p4_journals_latest_elapsed{${serverid_label}${sdpinst_label}} $LATEST_ELAPSED" >> "$tmpfname"
+
+    echo "#HELP p4_journals_latest_size Size in bytes of most recent journal" >> "$tmpfname"
+    echo "#TYPE p4_journals_latest_size gauge" >> "$tmpfname"
+    LATEST_SIZE=`echo $LATEST_JOURNAL|cut -f3 -d' '`
+    echo "p4_journals_latest_size{${serverid_label}${sdpinst_label}} $LATEST_SIZE" >> "$tmpfname"
+
+    echo "#HELP p4_journals_latest_id Numeric identifier of latest journal" >> "$tmpfname"
+    echo "#TYPE p4_journals_latest_id counter" >> "$tmpfname"
+    LATEST_ID=`echo $LATEST_JOURNAL|cut -f4 -d' '`
+    echo "p4_journals_latest_id{${serverid_label}${sdpinst_label}} $LATEST_ID" >> "$tmpfname"
+
+    rm $p4journals
+    chmod 644 "$tmpfname"
+    mv "$tmpfname" "$fname"
+}
+
 monitor_replicas () {
     # Metric for server replicas
     fname="$metrics_root/p4_replication${sdpinst_suffix}-${SERVER_ID}.prom"
@@ -789,4 +847,5 @@ monitor_filesys
 monitor_versions
 monitor_ssl
 monitor_checkpoint
+monitor_journals
 monitor_errors
