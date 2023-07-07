@@ -159,6 +159,12 @@ else
    SERVER_ID=$($p4 serverid 2>/dev/null | awk '{print $3}')
 fi
 [[ -n "$SERVER_ID" ]] || SERVER_ID=UnsetServerID
+
+if [ "$SERVER_ID" = "UnsetServerID" ]; then
+   >&2 echo "Server ID is unset. Exiting cowardly!" 
+   exit 1
+fi
+
 serverid_label="serverid=\"$SERVER_ID\""
 
 monitor_uptime () {
